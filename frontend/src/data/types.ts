@@ -30,6 +30,10 @@ export type PageResult = {
 export type ActionResult = {
   ok: boolean
   message: string
+  // 应用层发布退役时一次性签发的 revoke_token 及其定稿序号。
+  token?: string
+  tokenSeq?: number
+  replay?: boolean
 }
 
 export type OverviewResult = {

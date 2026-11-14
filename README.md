@@ -70,5 +70,38 @@ npm run build
 - 状态流转只允许在 `local-service.ts` 里改，页面组件不做业务判断。
 - 想回到初始数据：清掉浏览器里 `data-layer-studio:entries` 这一项，或调用 `resetModule(模块)`。
 
+## 应用层发布治理（退役 / 令牌 / 目录 / resolver）
+
+应用层发布（`ads`）不走通用状态机，专属规则集中在 `frontend/src/data/publishing.ts`
+（纯领域逻辑，不依赖浏览器），服务封装在 `frontend/src/api/local-service.ts`：
+
+- **一次性 revoke_token**：`服务下线` 只允许对「已发布」数据集执行，退役时按单调递增的
+  `token_seq` 一次性签发 `RVK-<seq>-<随机串>`；重复退役不重新签发。
+- **重新发布强制带 token**：退役数据集必须携带当前 `token_seq` 对应的令牌才能定稿新版本；
+  令牌缺失/不匹配一律拒绝，同一已消费令牌重放识别为重复请求，不新增副作用、不追加版本台账。
+- **归档契约 ≠ 可调用**：`archive_contract` 与 `callable` 是两个独立分栏。退役时
+  `archive_contract=true` 仅开放历史解释，`callable` 恒为 `false`；重新发布保留归档契约，
+  单独重新打开调用标志。归一化逻辑强制该不变量，存档不会被当成交付。
+- **目录索引（catalog_index）**：`catalogLookupService` 命中退役标识时校验 token，无 token /
+  错误 token / 有效 token 都返回 HTTP 410，仅有效 token 可看归档解释；只有 `callable=true`
+  的标识才返回 200。编目页与应用层发布页都把两个标志分栏呈现。
+- **resolver 对账**：resolver 契约表独立持久化（`data-layer-studio:resolver-contracts`），
+  `syncResolverNow` 从应用层发布的持久索引重读，逐标识同步状态/归档/调用标志/版本；主索引里
+  消失的旧契约保留不删。应用启动与每次退役、重新发布后自动对账。
+- **版本台账**：发布/退役/重新发布事件写入 `data-layer-studio:version-ledger`，详情面板按
+  应用数据集（主对象）回看发布版本。
+
+### 测试
+
+```bash
+cd frontend
+npm test          # 17 项纯领域测试 + 8 项服务层集成测试（localStorage 垫片）
+npm run typecheck # vue-tsc 类型检查
+npm run build     # 生产构建
+```
+
+领域测试位于 `frontend/tests/publishing.test.ts`，服务层集成测试位于
+`frontend/tests/publishing.service.test.ts`（通过 `tests/alias-loader.mjs` 映射 `@/` 别名）。
+
 领域：数据工程
 子方向：数仓与数据湖
